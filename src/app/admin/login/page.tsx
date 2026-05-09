@@ -16,6 +16,10 @@ export default function AdminLogin() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!auth) {
+      setError("Sanctuary Error: Firebase configuration is missing. Check Vercel environment variables.");
+      return;
+    }
     setLoading(true);
     setError("");
     try {
@@ -24,8 +28,12 @@ export default function AdminLogin() {
       await userCredential.user.getIdToken(true);
       router.push("/admin");
     } catch (err: any) {
-      setError("Invalid administrative credentials. Access Denied.");
       console.error(err);
+      if (err.code === 'auth/invalid-credential') {
+        setError("Invalid administrative credentials. Access Denied.");
+      } else {
+        setError("Divine Connection Error: " + (err.message || "Unknown error"));
+      }
     } finally {
       setLoading(false);
     }
