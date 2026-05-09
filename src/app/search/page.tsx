@@ -15,7 +15,7 @@ import {
   orderBy,
   onSnapshot
 } from "firebase/firestore";
-import { Heart, Search, Filter, User, Zap, Star, MessageCircle, X, ChevronRight, SlidersHorizontal, Sparkles, Check, ArrowLeft, Shield } from "lucide-react";
+import { Heart, Search, Filter, User, Zap, Star, MessageCircle, X, ChevronRight, SlidersHorizontal, Sparkles, Check, ArrowLeft, Shield, ShieldCheck, ShieldAlert } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { sendConnectionRequest, recordAction } from "@/lib/connections";
@@ -36,6 +36,10 @@ interface Profile {
   rashi?: string;
   gotra?: string;
   phoneNumber?: string;
+  isManaged?: boolean;
+  isPremium?: boolean;
+  badges?: string[];
+  lineage?: string;
 }
 
 export default function SearchPage() {
@@ -105,7 +109,7 @@ export default function SearchPage() {
       currentUserProfile?.photoURL
     );
     
-    if (res.error) {
+    if ('error' in res && res.error) {
       alert(res.error);
       return;
     }

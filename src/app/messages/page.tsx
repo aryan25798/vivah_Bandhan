@@ -103,7 +103,7 @@ export default function MessagesPage() {
           data.otherUser = userDoc.exists() ? userDoc.data() : { fullName: "Royal Member" };
         }
         
-        return { id: d.id, ...data };
+        return { ...data, id: d.id };
       }));
       
       const currentChatIds = new Set(chatList.map(c => c.id));

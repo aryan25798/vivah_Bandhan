@@ -44,7 +44,8 @@ import {
   Settings,
   LayoutDashboard,
   Zap,
-  LogOut
+  LogOut,
+  ShieldCheck
 } from "lucide-react";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
@@ -1490,7 +1491,7 @@ export default function AdminDashboard() {
                              <p className="text-[8px] font-black uppercase text-blue-400 tracking-widest">Active Fleet Bonds</p>
                              {userActivity.matches.map((m, idx) => (
                                 <div key={idx} className="flex items-center justify-between p-3 rounded-2xl bg-blue-500/5 border border-blue-500/10">
-                                   <p className="text-[10px] font-bold text-white">Match with {m.users.find(id => id !== selectedUser.id) ? (userProfiles[m.users.find(id => id !== selectedUser.id)!]?.fullName || "Soul") : "Soul"}</p>
+                                   <p className="text-[10px] font-bold text-white">Match with {m.users.find((id: string) => id !== selectedUser.id) ? (userProfiles[m.users.find((id: string) => id !== selectedUser.id)!]?.fullName || "Soul") : "Soul"}</p>
                                    <button 
                                      onClick={() => {
                                        setSelectedUser(null);

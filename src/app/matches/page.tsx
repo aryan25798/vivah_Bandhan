@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { collection, query, where, getDocs, onSnapshot, orderBy, limit } from "firebase/firestore";
-import { Heart, User, Check, X, MessageCircle, ArrowLeft, Stars, Search, Zap, Send, Sparkles } from "lucide-react";
+import { Heart, User, Check, X, MessageCircle, ArrowLeft, Stars, Search, Zap, Send, Sparkles, Shield, ShieldCheck } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter, useSearchParams } from "next/navigation";
 import { acceptRequest, declineRequest, unfriend } from "@/lib/connections";

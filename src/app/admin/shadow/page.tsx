@@ -140,7 +140,7 @@ export default function ShadowFleetPortal() {
         setFleetMatches(matches);
 
         // Resolve participants
-        matches.forEach(m => {
+        matches.forEach((m: any) => {
           m.users.forEach(async (uid: string) => {
             if (!userProfiles[uid]) {
                const uDoc = await getDoc(doc(db, "users", uid));

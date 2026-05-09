@@ -7,7 +7,7 @@ export async function GET() {
   try {
     let ip = '';
     try {
-      const headersList = headers();
+      const headersList = await headers();
       const forwarded = headersList.get('x-forwarded-for');
       ip = forwarded ? forwarded.split(',')[0] : '';
     } catch (e) {

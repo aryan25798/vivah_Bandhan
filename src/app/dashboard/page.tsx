@@ -265,7 +265,7 @@ export default function Dashboard() {
       currentUserProfile?.photoURL
     );
     
-    if (res.error) {
+    if ('error' in res && res.error) {
       alert(res.error);
       return;
     }

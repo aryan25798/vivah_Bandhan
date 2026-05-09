@@ -89,6 +89,7 @@ export default function Onboarding() {
     setIsGenerating(true);
     setError(null);
     try {
+      if (!user) throw new Error("Unauthorized");
       const idToken = await user.getIdToken();
       const res = await fetch("/api/ai/generate-bio", {
         method: "POST",
