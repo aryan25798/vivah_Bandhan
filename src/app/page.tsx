@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Heart, ShieldCheck, Zap, ArrowRight, Star, Sparkles, Shield, User, MessageCircle, Check } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
@@ -45,12 +46,12 @@ export default function LandingPage() {
           </div>
 
           <div className="flex items-center gap-6 md:gap-10">
-            <button 
-              onClick={() => router.push("/admin/login")}
+            <Link 
+              href="/admin/login"
               className="hidden lg:flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.4em] text-white/30 hover:text-gold transition-all group"
             >
               <Shield className="w-4 h-4 group-hover:rotate-12 transition-transform" /> Authority Access
-            </button>
+            </Link>
             <button 
               onClick={signInWithGoogle}
               className="px-8 py-3.5 md:px-12 md:py-4 bg-white/5 border border-white/10 rounded-full text-[10px] font-black uppercase tracking-[0.3em] hover:bg-gold hover:text-onyx transition-all duration-700 shadow-2xl group relative overflow-hidden"
@@ -257,9 +258,9 @@ export default function LandingPage() {
             <div className="space-y-10">
               <h4 className="text-[10px] font-black uppercase tracking-[0.5em] text-gold/60">Sanctuary</h4>
               <ul className="space-y-6 text-lg text-white/30 font-medium italic">
-                <li><button onClick={() => router.push("/admin/login")} className="hover:text-gold transition-colors text-left flex items-center gap-3">
+                <li><Link href="/admin/login" className="hover:text-gold transition-colors text-left flex items-center gap-3">
                    Authority Portal
-                </button></li>
+                </Link></li>
                 <li><a href="#" className="hover:text-gold transition-colors">Data Privacy</a></li>
                 <li><a href="#" className="hover:text-gold transition-colors">Vedic Verification</a></li>
                 <li><a href="#" className="hover:text-gold transition-colors">Royal Support</a></li>
