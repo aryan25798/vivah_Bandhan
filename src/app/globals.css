@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+@theme {
+  --color-gold: #C5A059;
+  --color-gold-light: #DFBD84;
+  --color-onyx: #0F0F0F;
+  --color-pearl: #FAF9F6;
+  --color-slate: #1E293B;
+  
+  --background-light: #FAF9F6;
+  --background-dark: #0A0A0A;
+  
+  --foreground-light: #0F0F0F;
+  --foreground-dark: #FAF9F6;
+
+  --font-sans: var(--font-outfit), ui-sans-serif, system-ui;
+  --font-serif: var(--font-playfair), ui-serif, Georgia;
+}
+
+:root {
+  --background: var(--background-light);
+  --foreground: var(--foreground-light);
+  --primary: var(--color-gold);
+  --secondary: var(--color-onyx);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: var(--background-dark);
+    --foreground: var(--foreground-dark);
+  }
+}
+
+body {
+  background: radial-gradient(circle at top right, #1a1a1a, #0a0a0a 60%), 
+              url("https://www.transparenttextures.com/patterns/dark-leather.png");
+  background-attachment: fixed;
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+  selection-background: var(--color-gold);
+  selection-color: white;
+  position: relative;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at 50% -20%, rgba(197, 160, 89, 0.08), transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Glassmorphism Utilities - Refined for Luxury */
+.glass {
+  background: rgba(15, 15, 15, 0.8);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(197, 160, 89, 0.2);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
+}
+
+.glass-light {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(197, 160, 89, 0.15);
+  box-shadow: 0 10px 40px -10px rgba(197, 160, 89, 0.2);
+}
+
+.royal-gradient {
+  background: linear-gradient(135deg, #C5A059 0%, #0F0F0F 100%);
+}
+
+.gold-gradient {
+  background: linear-gradient(135deg, #C5A059 0%, #DFBD84 50%, #C5A059 100%);
+}
+
+.text-gradient-gold {
+  background: linear-gradient(135deg, #C5A059 0%, #DFBD84 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
