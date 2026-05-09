@@ -8,9 +8,10 @@ export function middleware(request: NextRequest) {
   // Define protected routes
   const protectedPaths = ['/dashboard', '/onboarding', '/profile', '/admin'];
   const isProtected = protectedPaths.some(path => pathname.startsWith(path));
+  const isAuthPage = pathname === '/admin/login';
 
-  if (isProtected && !session) {
-    // Redirect to login if no session cookie exists
+  if (isProtected && !isAuthPage && !session) {
+    // Redirect to landing if no session cookie exists
     return NextResponse.redirect(new URL('/', request.url));
   }
 
