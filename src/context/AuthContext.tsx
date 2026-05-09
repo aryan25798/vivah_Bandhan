@@ -3,8 +3,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { 
   onAuthStateChanged, 
-  signInWithRedirect, 
-  GoogleAuthProvider, 
   signOut, 
   User 
 } from "firebase/auth";
@@ -40,42 +38,50 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return;
     }
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setUser(user);
-      if (user) {
-        // Synchronize with server-side session cookie
-        const idToken = await user.getIdToken();
-        await fetch("/api/auth/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ idToken })
-        });
+      try {
+        setUser(user);
+        if (user) {
+          // Synchronize with server-side session cookie
+          const idToken = await user.getIdToken();
+          await fetch("/api/auth/session", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ idToken })
+          }).catch(err => console.error("Session sync failed:", err));
 
-        // 1. Check Admin Status from Claims
-        const token = await user.getIdTokenResult();
-        const adminStatus = !!token.claims.admin;
-        setIsAdmin(adminStatus);
-        
-        // ... rest of the logic ...
-        if (!adminStatus) {
-          try {
-            const { db } = await import("@/lib/firebase");
-            const { doc, getDoc } = await import("firebase/firestore");
-            const userDoc = await getDoc(doc(db, "users", user.uid));
-            setIsOnboarded(userDoc.exists() && !!userDoc.data().onboarded);
-          } catch (err) {
-            console.error("Onboarding check failed:", err);
-            setIsOnboarded(false);
+          // 1. Check Admin Status from Claims
+          const token = await user.getIdTokenResult();
+          const adminStatus = !!token.claims.admin;
+          setIsAdmin(adminStatus);
+          
+          if (!adminStatus) {
+            try {
+              const { db } = await import("@/lib/firebase");
+              if (db) {
+                const { doc, getDoc } = await import("firebase/firestore");
+                const userDoc = await getDoc(doc(db, "users", user.uid));
+                setIsOnboarded(userDoc.exists() && !!userDoc.data().onboarded);
+              } else {
+                setIsOnboarded(false);
+              }
+            } catch (err) {
+              console.error("Onboarding check failed:", err);
+              setIsOnboarded(false);
+            }
+          } else {
+            setIsOnboarded(true);
           }
         } else {
-          setIsOnboarded(true);
+          // Clear session cookie
+          await fetch("/api/auth/session", { method: "DELETE" }).catch(() => {});
+          setIsAdmin(false);
+          setIsOnboarded(false);
         }
-      } else {
-        // Clear session cookie
-        await fetch("/api/auth/session", { method: "DELETE" });
-        setIsAdmin(false);
-        setIsOnboarded(false);
+      } catch (err) {
+        console.error("Auth state synchronization error:", err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();
@@ -83,14 +89,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signInWithGoogle = async () => {
     if (!auth) {
-      alert("Firebase configuration is missing. Please check your .env.local file.");
+      alert("Sanctuary Error: Firebase configuration is missing. Please ensure your environment variables are configured in Vercel.");
       return;
     }
+    const { signInWithPopup, GoogleAuthProvider } = await import("firebase/auth");
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithRedirect(auth, provider);
-    } catch (error) {
+      await signInWithPopup(auth, provider);
+    } catch (error: any) {
       console.error("Error signing in with Google:", error);
+      if (error.code === 'auth/configuration-not-found') {
+        alert("Sanctuary Error: Google Sign-In is not enabled in your Firebase Console.");
+      } else {
+        alert("Divine Connection Failed: " + error.message);
+      }
     }
   };
 

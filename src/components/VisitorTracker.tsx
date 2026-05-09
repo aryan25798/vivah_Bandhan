@@ -27,7 +27,7 @@ export default function VisitorTracker() {
           }
         }
 
-        if (!geo) return;
+        if (!geo || !db) return;
 
         // 2. Prepare Session Data
         const randomId = Math.random().toString(36).substr(2, 9);
