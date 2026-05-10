@@ -10,7 +10,7 @@ cloudinary.config({
 
 export async function POST(req: Request) {
   try {
-    const { uids, idToken } = await req.json();
+    const { userId, uids, all, searchTerm, idToken } = await req.json();
 
     if (!idToken) {
       return NextResponse.json({ error: "Unauthorized. Token missing." }, { status: 401 });
@@ -25,8 +25,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized. God Mode rights required." }, { status: 403 });
     }
 
-    if (!Array.isArray(uids) || uids.length === 0) {
-      return NextResponse.json({ error: "No targets specified for neutralization." }, { status: 400 });
+    let targetUids: string[] = [];
+
+    if (all) {
+      let q = adminDb.collection("users").where("role", "!=", "admin");
+      if (searchTerm) {
+        const capitalizedSearch = searchTerm.charAt(0).toUpperCase() + searchTerm.slice(1);
+        q = q.where("fullName", ">=", capitalizedSearch)
+             .where("fullName", "<=", capitalizedSearch + "\uf8ff");
+      }
+      const snap = await q.get();
+      targetUids = snap.docs.map(doc => doc.id);
+    } else if (uids && Array.isArray(uids)) {
+      targetUids = uids;
+    } else if (userId) {
+      targetUids = [userId];
+    }
+
+    if (targetUids.length === 0) {
+      return NextResponse.json({ error: "No targets identified for neutralization." }, { status: 400 });
     }
 
     const results = {
@@ -36,69 +53,78 @@ export async function POST(req: Request) {
       errors: [] as string[]
     };
 
-    // Process in small chunks to avoid timeouts
-    for (const uid of uids) {
-      try {
-        // 1. Fetch User Data for Cloudinary Cleanup
-        const userDoc = await adminDb.collection("users").doc(uid).get();
-        const userData = userDoc.data();
+    // 2. Robust Batch Processing
+    // We use a small concurrency limit to avoid hitting rate limits or timing out
+    const CONCURRENCY_LIMIT = 5; 
+    const CHUNK_SIZE = 100;
 
-        if (userData?.photoURL && userData.photoURL.includes("cloudinary.com")) {
-          // Extract public ID: https://res.cloudinary.com/demo/image/upload/v1234/sample.jpg -> sample
-          const parts = userData.photoURL.split('/');
-          const lastPart = parts[parts.length - 1];
-          const publicId = lastPart.split('.')[0];
-          
-          if (publicId) {
-            await cloudinary.uploader.destroy(publicId);
-            results.deletedCloudinary++;
+    for (let i = 0; i < targetUids.length; i += CHUNK_SIZE) {
+      const chunk = targetUids.slice(i, i + CHUNK_SIZE);
+      
+      // Process each chunk in limited parallel blocks
+      for (let j = 0; j < chunk.length; j += CONCURRENCY_LIMIT) {
+        const batch = chunk.slice(j, j + CONCURRENCY_LIMIT);
+        
+        await Promise.all(batch.map(async (uid) => {
+          try {
+            // A. Fetch User Data for Cloudinary Cleanup
+            const userDoc = await adminDb.collection("users").doc(uid).get();
+            const userData = userDoc.data();
+
+            if (userData?.photoURL && userData.photoURL.includes("cloudinary.com")) {
+              const parts = userData.photoURL.split('/');
+              const lastPart = parts[parts.length - 1];
+              const publicId = lastPart.split('.')[0];
+              
+              if (publicId) {
+                try {
+                  await cloudinary.uploader.destroy(publicId);
+                  results.deletedCloudinary++;
+                } catch (cErr) {
+                  console.warn(`Cloudinary cleanup failed for ${uid}:`, cErr);
+                }
+              }
+            }
+
+            // B. Delete Dependencies (Matches & Sessions)
+            // Note: For 10k users, this is many queries. 
+            // Future optimization: If all=true, maybe wipe collections if safe.
+            const [matchesSnap, sessionSnap] = await Promise.all([
+              adminDb.collection("matches").where("users", "array-contains", uid).get(),
+              adminDb.collection("active_sessions").where("uid", "==", uid).get()
+            ]);
+
+            const depBatch = adminDb.batch();
+            matchesSnap.docs.forEach(d => depBatch.delete(d.ref));
+            sessionSnap.docs.forEach(d => depBatch.delete(d.ref));
+            await depBatch.commit();
+
+            // C. Delete Firestore User Document
+            await adminDb.collection("users").doc(uid).delete();
+            results.deletedFirestore++;
+
+            // D. Delete from Firebase Auth
+            try {
+              await adminAuth.deleteUser(uid);
+              results.deletedAuth++;
+            } catch (authErr: any) {
+              if (authErr.code !== 'auth/user-not-found') throw authErr;
+            }
+
+          } catch (err: any) {
+            console.error(`Error nuking user ${uid}:`, err);
+            results.errors.push(`${uid}: ${err.message}`);
           }
-        }
-
-        // 2. Delete Matches where user is a participant
-        const matchesSnap = await adminDb.collection("matches")
-          .where("users", "array-contains", uid)
-          .get();
-        
-        const matchBatch = adminDb.batch();
-        matchesSnap.docs.forEach(matchDoc => {
-          matchBatch.delete(matchDoc.ref);
-        });
-        await matchBatch.commit();
-
-        // 3. Delete Active Sessions
-        const sessionSnap = await adminDb.collection("active_sessions")
-          .where("uid", "==", uid)
-          .get();
-        
-        const sessionBatch = adminDb.batch();
-        sessionSnap.docs.forEach(sDoc => {
-          sessionBatch.delete(sDoc.ref);
-        });
-        await sessionBatch.commit();
-
-        // 4. Delete Firestore User Document
-        await adminDb.collection("users").doc(uid).delete();
-        results.deletedFirestore++;
-
-        // 5. Delete from Firebase Auth
-        try {
-          await adminAuth.deleteUser(uid);
-          results.deletedAuth++;
-        } catch (authErr: any) {
-          // If user doesn't exist in Auth (e.g. managed profile), ignore
-          if (authErr.code !== 'auth/user-not-found') throw authErr;
-        }
-
-      } catch (err: any) {
-        console.error(`Error nuking user ${uid}:`, err);
-        results.errors.push(`${uid}: ${err.message}`);
+        }));
       }
+      
+      // Check if we are approaching timeout (standard is 10-60s)
+      // For now, we just keep going, but a real background task would be better for 10k.
     }
 
     return NextResponse.json({ 
       success: true, 
-      message: `Atomic Nuke complete. wiped ${results.deletedFirestore} records.`,
+      message: `Atomic Nuke complete. Wiped ${results.deletedFirestore} records.`,
       results 
     });
 

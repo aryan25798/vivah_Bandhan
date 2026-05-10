@@ -186,55 +186,51 @@ export default function AdminDashboard() {
   const [impersonateUid, setImpersonateUid] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [showManagedSurveillance, setShowManagedSurveillance] = useState(false);
+  const [selectAllGlobal, setSelectAllGlobal] = useState(false);
+  const [totalFilteredCount, setTotalFilteredCount] = useState<number | null>(null);
 
   const handleBulkAction = async (action: 'ban' | 'premium' | 'unban' | 'delete') => {
-    if (selectedUsers.size === 0) return;
+    if (selectedUsers.size === 0 && !selectAllGlobal) return;
 
     if (action === 'delete') {
-      const confirm = window.confirm(`WARNING: This will PERMANENTLY DELETE ${selectedUsers.size} users, including their Auth accounts and Cloudinary images. This cannot be undone. Proceed?`);
+      const targetCount = selectAllGlobal ? (totalFilteredCount ?? stats.totalUsers) : selectedUsers.size;
+      const confirm = window.confirm(`CRITICAL WARNING: This will PERMANENTLY WIPE ${targetCount} users, including Auth accounts and Cloudinary images. This cannot be undone. Proceed?`);
       if (!confirm) return;
     }
 
     setIsBulkProcessing(true);
     try {
-      if (action === 'delete') {
-        const uids = Array.from(selectedUsers);
-        const CHUNK_SIZE = 50; // Deleting images takes time, smaller chunks
-        
-        for (let i = 0; i < uids.length; i += CHUNK_SIZE) {
-          const chunk = uids.slice(i, i + CHUNK_SIZE);
-          const res = await fetch("/api/admin/nuke", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ uids: chunk }),
-          });
-          if (!res.ok) throw new Error("Bulk deletion failed");
-        }
-      } else {
-        const { writeBatch } = await import("firebase/firestore");
-        const uids = Array.from(selectedUsers);
-        const CHUNK_SIZE = 450;
-        
-        for (let i = 0; i < uids.length; i += CHUNK_SIZE) {
-          const chunk = uids.slice(i, i + CHUNK_SIZE);
-          const batch = writeBatch(db);
-          
-          chunk.forEach(uid => {
-            const userRef = doc(db, "users", uid);
-            if (action === 'ban') batch.update(userRef, { isBanned: true });
-            if (action === 'unban') batch.update(userRef, { isBanned: false });
-            if (action === 'premium') batch.update(userRef, { isPremium: true, tier: 'premium' });
-          });
-          
-          await batch.commit();
-        }
-      }
+      const idToken = await user?.getIdToken();
+      const payload: any = { 
+        action, 
+        idToken,
+        all: selectAllGlobal,
+        searchTerm: selectAllGlobal ? searchTerm : undefined,
+        uids: selectAllGlobal ? undefined : Array.from(selectedUsers)
+      };
+
+      // We consolidate all bulk actions into a unified endpoint or use existing ones
+      // For simplicity and speed, I'll use the specific endpoints but with bulk support
+      let endpoint = "/api/admin/nuke";
+      if (action === 'ban' || action === 'unban') endpoint = "/api/admin/ban";
+      if (action === 'premium') endpoint = "/api/admin/premium";
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Bulk ${action} failed`);
       
-      alert(`Bulk ${action} successful for ${selectedUsers.size} users.`);
+      alert(`Bulk ${action} initiated successfully for ${selectAllGlobal ? 'all' : selectedUsers.size} souls.`);
       setSelectedUsers(new Set());
+      setSelectAllGlobal(false);
       fetchAdminData();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Bulk action failed:", error);
+      alert(`Command failure: ${error.message}`);
     } finally {
       setIsBulkProcessing(false);
     }
@@ -272,24 +268,34 @@ export default function AdminDashboard() {
       
       let q;
       if (search) {
+        // Reset global selection on new search
+        setSelectAllGlobal(false);
+        
         // Multi-field search strategy: Primary Name Prefix Search
         const capitalizedSearch = search.charAt(0).toUpperCase() + search.slice(1);
-        q = query(
+        const searchBase = query(
           collection(db, "users"),
           where("fullName", ">=", capitalizedSearch),
-          where("fullName", "<=", capitalizedSearch + "\uf8ff"),
-          limit(50)
+          where("fullName", "<=", capitalizedSearch + "\uf8ff")
         );
-      } else if (activeTab === 'managed') {
-        // Specific query for Shadow Ops to ensure all 100+ managed users are fetched
-        q = query(collection(db, "users"), where("isManaged", "==", true), limit(30));
-        if (isLoadMore && lastUserDoc) {
-          q = query(q, startAfter(lastUserDoc));
-        }
+        
+        // Fetch filtered count for global selection UI
+        getCountFromServer(searchBase).then(snap => setTotalFilteredCount(snap.data().count));
+        
+        q = query(searchBase, limit(50));
       } else {
-        q = query(collection(db, "users"), limit(20));
-        if (isLoadMore && lastUserDoc) {
-          q = query(q, startAfter(lastUserDoc));
+        setTotalFilteredCount(null);
+        if (activeTab === 'managed') {
+          // Specific query for Shadow Ops to ensure all 100+ managed users are fetched
+          q = query(collection(db, "users"), where("isManaged", "==", true), limit(30));
+          if (isLoadMore && lastUserDoc) {
+            q = query(q, startAfter(lastUserDoc));
+          }
+        } else {
+          q = query(collection(db, "users"), limit(20));
+          if (isLoadMore && lastUserDoc) {
+            q = query(q, startAfter(lastUserDoc));
+          }
         }
       }
 
@@ -307,7 +313,7 @@ export default function AdminDashboard() {
         return unique;
       });
       
-      if (!search) setLastUserDoc(newLastDoc);
+      if (!isLoadMore) setLastUserDoc(newLastDoc);
 
       const locations = data
         .filter((u: any) => u.lastLoginLocation)
@@ -999,12 +1005,14 @@ export default function AdminDashboard() {
                         <th className="px-8 py-6 font-black w-10">
                           <input 
                             type="checkbox" 
+                            checked={selectedUsers.size === recentUsers.length && recentUsers.length > 0}
                             className="w-4 h-4 rounded border-white/10 bg-white/5 accent-rose-gold"
                             onChange={(e) => {
                               if (e.target.checked) {
                                 setSelectedUsers(new Set(recentUsers.map(u => u.id)));
                               } else {
                                 setSelectedUsers(new Set());
+                                setSelectAllGlobal(false);
                               }
                             }}
                           />
@@ -1015,6 +1023,21 @@ export default function AdminDashboard() {
                         <th className="px-8 py-6 font-black">Managed</th>
                         <th className="px-8 py-6 font-black text-right">Actions</th>
                       </tr>
+                      {/* Global Selection Prompt */}
+                      {selectedUsers.size === recentUsers.length && recentUsers.length < (totalFilteredCount ?? stats.totalUsers) && (
+                        <tr className="bg-rose-gold/10 border-b border-rose-gold/20">
+                          <td colSpan={6} className="px-8 py-3 text-center">
+                            <button 
+                              onClick={() => setSelectAllGlobal(true)}
+                              className="text-[10px] font-black uppercase tracking-widest text-rose-gold hover:underline"
+                            >
+                              {selectAllGlobal 
+                                ? `All ${totalFilteredCount ?? stats.totalUsers} souls in ${searchTerm ? 'search' : 'registry'} selected.` 
+                                : `All ${recentUsers.length} souls on this page selected. Select all ${totalFilteredCount ?? stats.totalUsers} souls in ${searchTerm ? 'search' : 'registry'}?`}
+                            </button>
+                          </td>
+                        </tr>
+                      )}
                     </thead>
                     <tbody className="divide-y divide-white/5">
                       {recentUsers.map((u) => (
@@ -1100,11 +1123,13 @@ export default function AdminDashboard() {
                       <div className="glass p-6 rounded-[2.5rem] border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex items-center justify-between gap-6">
                         <div className="flex items-center gap-4">
                            <div className="w-12 h-12 rounded-2xl bg-rose-gold text-black flex items-center justify-center font-black">
-                             {selectedUsers.size}
+                             {selectAllGlobal ? (totalFilteredCount ?? stats.totalUsers) : selectedUsers.size}
                            </div>
                            <div>
-                             <p className="text-sm font-bold text-white">Souls Selected</p>
-                             <p className="text-[10px] text-zinc-500 uppercase tracking-widest">Ready for Command</p>
+                             <p className="text-sm font-bold text-white">{selectAllGlobal ? "All Database Souls" : "Souls Selected"}</p>
+                             <p className="text-[10px] text-zinc-500 uppercase tracking-widest">
+                               {selectAllGlobal ? "Global Command Mode" : "Ready for Command"}
+                             </p>
                            </div>
                         </div>
 
