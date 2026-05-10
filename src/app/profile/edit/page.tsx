@@ -7,6 +7,7 @@ import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Heart, Save, ArrowLeft, Camera, Sparkles, Shield, User, Zap, Star, Check } from "lucide-react";
+import Image from "next/image";
 import { optimizeImage } from "@/lib/utils";
 
 export default function EditProfile() {
@@ -117,11 +118,7 @@ export default function EditProfile() {
               <div className="relative w-full aspect-square rounded-[4rem] md:rounded-[5rem] overflow-hidden border-2 border-white/5 p-2 bg-white/5 backdrop-blur-3xl shadow-[0_50px_100px_rgba(0,0,0,0.8)]">
                 <div className="w-full h-full rounded-[3.5rem] md:rounded-[4.5rem] overflow-hidden relative group/inner">
                   {formData.photoURL ? (
-                    <img 
-                      src={optimizeImage(formData.photoURL, 800)} 
-                      alt="Profile" 
-                      className="w-full h-full object-cover transition-transform duration-[4s] group-hover/inner:scale-110" 
-                    />
+                    <Image src={optimizeImage(formData.photoURL, 800)} alt="Profile" fill className="w-full h-full object-cover transition-transform duration-[4s] group-hover/inner:scale-110" sizes="(max-width: 768px) 100vw, 50vw" />
                   ) : (
                     <div className="w-full h-full bg-onyx flex items-center justify-center">
                       <User className="w-20 h-20 text-white/10" />

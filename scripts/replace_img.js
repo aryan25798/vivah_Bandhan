@@ -2,8 +2,8 @@ const fs = require('fs');
 const path = require('path');
 
 const files = [
-  'src/app/admin/page.tsx',
-  'src/app/onboarding/page.tsx'
+  'src/app/admin/shadow/page.tsx',
+  'src/app/profile/edit/page.tsx'
 ];
 
 files.forEach(file => {

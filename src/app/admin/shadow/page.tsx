@@ -42,6 +42,7 @@ import {
   RefreshCw,
   LogOut
 } from "lucide-react";
+import Image from "next/image";
 import { signOut } from "firebase/auth";
 import { motion, AnimatePresence } from "framer-motion";
 import { formatDistanceToNow } from "date-fns";
@@ -386,7 +387,7 @@ export default function ShadowFleetPortal() {
                         <div key={signal.id} className="p-5 md:p-6 bg-white/2 border border-white/5 rounded-[2rem] flex flex-col sm:flex-row justify-between items-center gap-6 group hover:bg-white/5 transition-all">
                            <div className="flex items-center gap-4 md:gap-6 w-full sm:w-auto">
                               <div className="w-14 h-14 rounded-2xl bg-zinc-900 border border-white/10 overflow-hidden shrink-0 shadow-lg">
-                                 {userProfiles[signal.fromId]?.photoURL ? <img src={userProfiles[signal.fromId].photoURL} className="w-full h-full object-cover" /> : <User className="w-6 h-6 m-4 text-zinc-700" />}
+                                 {userProfiles[signal.fromId]?.photoURL ? <Image src={userProfiles[signal.fromId].photoURL} alt="" fill className="w-full h-full object-cover" sizes="(max-width: 768px) 100vw, 50vw" /> : <User className="w-6 h-6 m-4 text-zinc-700" />}
                               </div>
                               <div className="min-w-0">
                                  <p className="font-bold text-base md:text-lg text-white truncate">
@@ -466,7 +467,7 @@ export default function ShadowFleetPortal() {
                                        <td className="py-6 px-4">
                                           <div className="flex items-center gap-4">
                                              <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-white/10 overflow-hidden shadow-md">
-                                                {u.photoURL ? <img src={u.photoURL} className="w-full h-full object-cover" /> : <User className="w-5 h-5 m-3.5 text-zinc-700" />}
+                                                {u.photoURL ? <Image src={u.photoURL} alt="" fill className="w-full h-full object-cover" sizes="(max-width: 768px) 100vw, 50vw" /> : <User className="w-5 h-5 m-3.5 text-zinc-700" />}
                                              </div>
                                              <div>
                                                 <p className="font-bold text-white group-hover:text-blue-400 transition-colors">{u.fullName}</p>
@@ -512,7 +513,7 @@ export default function ShadowFleetPortal() {
                                     </div>
                                  )}
                                  <div className="w-24 h-24 rounded-[2rem] bg-zinc-900 border-2 border-white/5 overflow-hidden mb-6 group-hover:scale-105 transition-transform shadow-2xl">
-                                    {u.photoURL ? <img src={u.photoURL} className="w-full h-full object-cover" /> : <User className="w-10 h-10 m-7 text-zinc-700" />}
+                                    {u.photoURL ? <Image src={u.photoURL} alt="" fill className="w-full h-full object-cover" sizes="(max-width: 768px) 100vw, 50vw" /> : <User className="w-10 h-10 m-7 text-zinc-700" />}
                                  </div>
                                  <h3 className="font-bold text-xl mb-1 text-white">{u.fullName}</h3>
                                  <p className="text-[10px] text-zinc-500 uppercase tracking-widest mb-6 font-black">{u.occupation}</p>
@@ -564,7 +565,7 @@ export default function ShadowFleetPortal() {
                               <div className="flex -space-x-3 mb-4">
                                  {chat.users.map((uid: string) => (
                                     <div key={uid} className="w-10 h-10 rounded-xl border-4 border-[#0a0a0a] bg-zinc-900 overflow-hidden shrink-0 shadow-lg">
-                                       {userProfiles[uid]?.photoURL ? <img src={userProfiles[uid].photoURL} className="w-full h-full object-cover" /> : <User className="w-4 h-4 m-3 text-zinc-700" />}
+                                       {userProfiles[uid]?.photoURL ? <Image src={userProfiles[uid].photoURL} alt="" fill className="w-full h-full object-cover" sizes="(max-width: 768px) 100vw, 50vw" /> : <User className="w-4 h-4 m-3 text-zinc-700" />}
                                     </div>
                                  ))}
                               </div>
@@ -690,7 +691,7 @@ export default function ShadowFleetPortal() {
                <div className="p-10">
                   <div className="flex flex-col md:flex-row gap-8 items-center md:items-start mb-10">
                      <div className="w-32 h-32 rounded-[2.5rem] bg-zinc-900 border-2 border-blue-500/30 overflow-hidden shrink-0">
-                        {selectedUser.photoURL ? <img src={selectedUser.photoURL} className="w-full h-full object-cover" /> : <User className="w-12 h-12 m-10 text-zinc-700" />}
+                        {selectedUser.photoURL ? <Image src={selectedUser.photoURL} alt="" fill className="w-full h-full object-cover" sizes="(max-width: 768px) 100vw, 50vw" /> : <User className="w-12 h-12 m-10 text-zinc-700" />}
                      </div>
                      <div className="flex-1 text-center md:text-left pt-4">
                         <h3 className="text-4xl font-bold mb-2">{selectedUser.fullName}</h3>

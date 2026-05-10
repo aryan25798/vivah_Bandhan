@@ -10,6 +10,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { acceptRequest, declineRequest, unfriend } from "@/lib/connections";
 import NotificationHub from "@/components/NotificationHub";
 import { optimizeImage } from "@/lib/utils";
+import Image from "next/image";
 import BottomNav from "@/components/BottomNav";
 
 export default function MatchesPage() {
@@ -55,24 +56,26 @@ export default function MatchesPage() {
       const requests = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })).filter((r: any) => r.fromId !== user.uid);
       
       const fromIds = Array.from(new Set(requests.map((r: any) => r.fromId)));
-      const profileMap: Record<string, any> = {};
       
       if (fromIds.length > 0) {
-        // Batch fetch profiles in chunks of 30 (Firestore limit)
-        for (let i = 0; i < fromIds.length; i += 30) {
-          const chunk = fromIds.slice(i, i + 30);
-          const q = query(collection(db, "users"), where("uid", "in", chunk));
-          const pSnap = await getDocs(q);
-          pSnap.forEach(d => profileMap[d.id] = d.data());
+        const idToken = await user.getIdToken();
+        const res = await fetch("/api/profiles/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idToken, uids: fromIds })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          const enriched = requests.map((req: any) => ({
+            ...req,
+            fromPhoto: req.fromPhoto || data.profiles[req.fromId]?.photoURL
+          }));
+          setIncoming(enriched);
         }
+      } else {
+        setIncoming([]);
       }
-
-      const enriched = requests.map((req: any) => ({
-        ...req,
-        fromPhoto: req.fromPhoto || profileMap[req.fromId]?.photoURL
-      }));
-
-      setIncoming(enriched);
     });
 
     // Listen for Outgoing Requests
@@ -96,24 +99,28 @@ export default function MatchesPage() {
       const matchDocs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const partnerIds = Array.from(new Set(matchDocs.map((m: any) => m.users.find((id: string) => id !== user.uid))));
       
-      const profileMap: Record<string, any> = {};
       if (partnerIds.length > 0) {
-        for (let i = 0; i < partnerIds.length; i += 30) {
-          const chunk = partnerIds.slice(i, i + 30);
-          const q = query(collection(db, "users"), where("uid", "in", chunk));
-          const pSnap = await getDocs(q);
-          pSnap.forEach(d => profileMap[d.id] = d.data());
+        const idToken = await user.getIdToken();
+        const res = await fetch("/api/profiles/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idToken, uids: partnerIds })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          const enriched = matchDocs.map((m: any) => {
+            const otherId = m.users.find((id: string) => id !== user.uid);
+            return { 
+              ...m, 
+              partner: data.profiles[otherId] ? { uid: otherId, ...data.profiles[otherId] } : null 
+            };
+          });
+          setMatches(enriched);
         }
+      } else {
+        setMatches([]);
       }
-
-      const enriched = matchDocs.map((m: any) => {
-        const otherId = m.users.find((id: string) => id !== user.uid);
-        return { 
-          ...m, 
-          partner: profileMap[otherId] ? { uid: otherId, ...profileMap[otherId] } : null 
-        };
-      });
-      setMatches(enriched);
     });
 
     // Listen for Declined Requests
@@ -126,23 +133,26 @@ export default function MatchesPage() {
       const requests = snap.docs.map(doc => ({ id: doc.id, ...doc.data() })).filter((r: any) => r.fromId !== user.uid);
       
       const fromIds = Array.from(new Set(requests.map((r: any) => r.fromId)));
-      const profileMap: Record<string, any> = {};
       
       if (fromIds.length > 0) {
-        for (let i = 0; i < fromIds.length; i += 30) {
-          const chunk = fromIds.slice(i, i + 30);
-          const q = query(collection(db, "users"), where("uid", "in", chunk));
-          const pSnap = await getDocs(q);
-          pSnap.forEach(d => profileMap[d.id] = d.data());
+        const idToken = await user.getIdToken();
+        const res = await fetch("/api/profiles/batch", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idToken, uids: fromIds })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          const enriched = requests.map((req: any) => ({
+            ...req,
+            fromPhoto: req.fromPhoto || data.profiles[req.fromId]?.photoURL
+          }));
+          setDeclined(enriched);
         }
+      } else {
+        setDeclined([]);
       }
-
-      const enriched = requests.map((req: any) => ({
-        ...req,
-        fromPhoto: req.fromPhoto || profileMap[req.fromId]?.photoURL
-      }));
-      
-      setDeclined(enriched);
     });
 
     setLoading(false);
@@ -427,11 +437,14 @@ function ConnectionCard({ profile, type, onAccept, onDecline, onView }: any) {
     >
       <div className="flex flex-col md:flex-row items-center gap-6 md:gap-8 w-full md:w-auto text-center md:text-left">
         <div className="relative flex-shrink-0">
-          <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden border-2 border-white/5 p-1.5 group-hover:border-gold/30 transition-all duration-700">
+          <div className="w-24 h-24 md:w-32 md:h-32 rounded-full overflow-hidden border-2 border-white/5 p-1.5 group-hover:border-gold/30 transition-all duration-700 relative">
             {profile.fromPhoto || profile.photoURL ? (
-              <img 
+              <Image 
                 src={optimizeImage(profile.fromPhoto || profile.photoURL, 400)} 
-                className="w-full h-full object-cover rounded-full" 
+                alt=""
+                fill
+                className="object-cover rounded-full" 
+                sizes="(max-width: 768px) 96px, 128px"
               />
             ) : (
               <div className="w-full h-full bg-white/5 flex items-center justify-center rounded-full">
@@ -473,6 +486,7 @@ function ConnectionCard({ profile, type, onAccept, onDecline, onView }: any) {
               <X className="w-6 h-6" />
             </button>
             <button 
+              aria-label="Accept Request"
               onClick={onAccept} 
               className="flex-1 md:flex-none h-14 md:h-16 px-8 flex items-center justify-center gold-gradient text-onyx rounded-3xl hover:scale-105 active:scale-95 transition-all shadow-[0_20px_40px_rgba(197,160,89,0.3)] font-black uppercase tracking-widest text-xs"
             >
@@ -516,10 +530,13 @@ function MatchCard({ match, user, onUnfriend, router }: any) {
       <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-8 relative z-10">
          <div className="flex flex-col md:flex-row items-center gap-6 md:gap-8 w-full md:w-auto text-center md:text-left">
             <div className="relative">
-              <div className="w-28 h-28 md:w-36 md:h-36 rounded-full overflow-hidden border-2 border-gold/20 p-2 group-hover:border-gold/50 transition-all duration-700">
-                <img 
+              <div className="w-28 h-28 md:w-36 md:h-36 rounded-full overflow-hidden border-2 border-gold/20 p-2 group-hover:border-gold/50 transition-all duration-700 relative">
+                <Image 
                   src={optimizeImage(partner.photoURL, 400)}
-                  className="w-full h-full object-cover rounded-full transition-transform duration-[4s] group-hover:scale-110"
+                  alt={partner.fullName}
+                  fill
+                  className="object-cover rounded-full transition-transform duration-[4s] group-hover:scale-110"
+                  sizes="(max-width: 768px) 112px, 144px"
                 />
               </div>
               <div className="absolute top-2 right-2 w-10 h-10 gold-gradient rounded-2xl flex items-center justify-center text-onyx shadow-2xl border-4 border-[#060606] rotate-12">

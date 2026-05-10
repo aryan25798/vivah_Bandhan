@@ -20,6 +20,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { sendConnectionRequest, recordAction } from "@/lib/connections";
 import { optimizeImage } from "@/lib/utils";
+import Image from "next/image";
 import BottomNav from "@/components/BottomNav";
 import { ProfileCardSkeleton } from "@/components/Skeletons";
 
@@ -120,62 +121,36 @@ export default function SearchPage() {
   const [searchTerm, setSearchTerm] = useState("");
 
   const fetchProfiles = async (isLoadMore = false, search = "") => {
+    if (!user) return;
     if (!isLoadMore && !search) setLoading(true);
     else setLoadingMore(true);
 
     try {
-      const { collection, query, where, getDocs, limit, startAfter, orderBy } = await import("firebase/firestore");
+      const idToken = await user.getIdToken();
+      const response = await fetch("/api/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idToken,
+          searchTerm: search || searchTerm,
+          minAge: filters.minAge,
+          maxAge: filters.maxAge,
+          religion: filters.religion,
+          occupation: filters.occupation,
+          lastUid: isLoadMore ? (profiles[profiles.length - 1]?.uid) : null,
+          limitCount: 12
+        })
+      });
+
+      const data = await response.json();
       
-      let q = query(
-        collection(db, "users"),
-        where("onboarded", "==", true)
-      );
-
-      // 1. Search Logic (Prefix Match)
-      if (search) {
-        const capitalizedSearch = search.charAt(0).toUpperCase() + search.slice(1);
-        q = query(
-          q,
-          orderBy("fullName"),
-          where("fullName", ">=", capitalizedSearch),
-          where("fullName", "<=", capitalizedSearch + "\uf8ff")
-        );
-      } else {
-        // Default sort for pagination
-        q = query(q, orderBy("createdAt", "desc"));
-      }
-
-      // 2. Filters
-      if (filters.religion && filters.religion !== "All") {
-        q = query(q, where("religion", "==", filters.religion));
-      }
-      if (filters.occupation && filters.occupation !== "All") {
-        q = query(q, where("occupation", "==", filters.occupation));
-      }
-
-      const PAGE_SIZE = 12;
-      q = query(q, limit(PAGE_SIZE));
-
-      if (isLoadMore && lastDoc) {
-        q = query(q, startAfter(lastDoc));
-      }
-
-      const querySnapshot = await getDocs(q);
-      const newProfiles = querySnapshot.docs
-        .map(doc => ({
-          uid: doc.id,
-          ...doc.data()
-        })) as Profile[];
-
-      const filteredProfiles = newProfiles.filter(p => p.uid !== user?.uid);
-
-      setLastDoc(querySnapshot.docs[querySnapshot.docs.length - 1]);
-      setHasMore(querySnapshot.docs.length === PAGE_SIZE);
-      
-      if (isLoadMore) {
-        setProfiles(prev => [...prev, ...filteredProfiles]);
-      } else {
-        setProfiles(filteredProfiles);
+      if (data.success) {
+        if (isLoadMore) {
+          setProfiles(prev => [...prev, ...data.profiles]);
+        } else {
+          setProfiles(data.profiles);
+        }
+        setHasMore(data.hasMore);
       }
     } catch (error) {
       console.error("Error fetching search results:", error);
@@ -318,17 +293,21 @@ export default function SearchPage() {
                     window.history.pushState(null, '', `?profile=${profile.uid}`);
                   }}
                 >
-                  {profile.photoURL ? (
-                    <img 
-                      src={optimizeImage(profile.photoURL, 400)} 
-                      alt={profile.fullName}
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                    />
-                  ) : (
-                    <div className="w-full h-full bg-onyx flex items-center justify-center">
-                      <User className="w-16 h-16 text-white/10" />
-                    </div>
-                  )}
+                  <div className="relative aspect-[3/4.2] w-full h-full">
+                    {profile.photoURL ? (
+                      <Image 
+                        src={optimizeImage(profile.photoURL, 400)} 
+                        alt={profile.fullName}
+                        fill
+                        className="object-cover transition-transform duration-700 group-hover:scale-110"
+                        sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-onyx flex items-center justify-center">
+                        <User className="w-16 h-16 text-white/10" />
+                      </div>
+                    )}
+                  </div>
                   
                   {/* Glass Overlay Info */}
                   <div className="absolute inset-x-4 bottom-4 p-5 bg-black/40 backdrop-blur-2xl rounded-[2rem] border border-white/10 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-500">
@@ -487,15 +466,21 @@ export default function SearchPage() {
           >
             <div className="min-h-screen flex flex-col lg:flex-row relative">
               {/* Profile Visual: Left Panel */}
-              <div className="w-full lg:w-1/2 h-[60vh] lg:h-screen sticky top-0 z-10 overflow-hidden">
-                <motion.img 
+              <div className="w-full lg:w-1/2 h-[60vh] lg:h-screen sticky top-0 z-10 overflow-hidden relative">
+                <motion.div
                   initial={{ scale: 1.1 }}
                   animate={{ scale: 1 }}
                   transition={{ duration: 1.5, ease: "easeOut" }}
-                  src={optimizeImage(modalProfile.photoURL, 1200)} 
-                  alt="" 
-                  className="w-full h-full object-cover" 
-                />
+                  className="absolute inset-0"
+                >
+                  <Image 
+                    src={optimizeImage(modalProfile.photoURL, 1200)} 
+                    alt="" 
+                    fill
+                    className="object-cover" 
+                    sizes="(max-width: 1024px) 100vw, 50vw"
+                  />
+                </motion.div>
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-[#060606] hidden lg:block" />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#060606] via-transparent to-transparent lg:hidden" />
                 
@@ -637,10 +622,10 @@ export default function SearchPage() {
                    <div className="relative z-10 space-y-6">
                      <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-onyx/10 rounded-full flex items-center justify-center"><Check className="w-5 h-5" /></div>
-                        <h3 className="text-onyx text-2xl md:text-3xl font-serif font-bold">Deep Alignment Insight</h3>
+                        <h3 className="text-onyx text-2xl md:text-3xl font-serif font-bold">Sacred Harmony</h3>
                      </div>
                      <p className="text-onyx/80 text-lg md:text-2xl leading-relaxed font-serif font-medium">
-                       "This profile exhibits a 94% alignment with your spiritual and professional trajectory. Your shared appreciation for tradition and ambition creates a rare celestial harmony."
+                       "Your spiritual and professional trajectories show profound resonance. A shared path built on tradition and ambition awaits your discovery."
                      </p>
                    </div>
                 </div>

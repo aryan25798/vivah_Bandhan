@@ -9,6 +9,7 @@ import { useAuth } from "@/context/AuthContext";
 import { acceptRequest, declineRequest, ConnectionRequest } from "@/lib/connections";
 import { formatDistanceToNow } from "date-fns";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 export default function NotificationHub() {
   const { user } = useAuth();
@@ -132,10 +133,16 @@ export default function NotificationHub() {
                     >
                       <div className="flex items-center gap-5">
                         <div className="relative shrink-0">
-                          <div className="w-14 h-14 rounded-full border-2 border-white/5 p-1">
-                            <div className="w-full h-full rounded-full overflow-hidden bg-onyx">
+                          <div className="w-14 h-14 rounded-full border-2 border-white/5 p-1 relative">
+                            <div className="w-full h-full rounded-full overflow-hidden bg-onyx relative">
                               {notif.fromPhoto ? (
-                                <img src={notif.fromPhoto} alt="" className="w-full h-full object-cover" />
+                                <Image 
+                                  src={notif.fromPhoto} 
+                                  alt="" 
+                                  fill
+                                  className="object-cover" 
+                                  sizes="56px"
+                                />
                               ) : (
                                 <div className="w-full h-full bg-white/5 flex items-center justify-center">
                                   <User className="text-white/20 w-6 h-6" />

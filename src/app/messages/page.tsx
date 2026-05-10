@@ -38,6 +38,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import NotificationHub from "@/components/NotificationHub";
 import { optimizeImage } from "@/lib/utils";
+import Image from "next/image";
 import BottomNav from "@/components/BottomNav";
 
 interface Chat {
@@ -281,10 +282,16 @@ export default function MessagesPage() {
                   }`}
                 >
                   <div className="relative flex-shrink-0">
-                    <div className={`w-10 h-10 rounded-full border-2 p-0.5 transition-all duration-700 ${selectedChat?.id === chat.id ? 'border-gold rotate-[360deg]' : 'border-white/10'}`}>
-                      <div className="w-full h-full rounded-full overflow-hidden bg-onyx">
+                    <div className={`w-10 h-10 rounded-full border-2 p-0.5 transition-all duration-700 relative ${selectedChat?.id === chat.id ? 'border-gold rotate-[360deg]' : 'border-white/10'}`}>
+                      <div className="w-full h-full rounded-full overflow-hidden bg-onyx relative">
                         {chat.otherUser?.photoURL ? (
-                          <img src={optimizeImage(chat.otherUser.photoURL, 100)} alt="" className="w-full h-full object-cover" />
+                          <Image 
+                            src={optimizeImage(chat.otherUser.photoURL, 100)} 
+                            alt="" 
+                            fill
+                            className="object-cover" 
+                            sizes="40px"
+                          />
                         ) : (
                           <User className="w-full h-full p-2 text-white/20" />
                         )}
@@ -341,10 +348,16 @@ export default function MessagesPage() {
                     >
                       <ArrowLeft className="w-4 h-4" />
                     </button>
-                    <div className="w-10 h-10 rounded-full border border-gold/20 p-0.5">
-                      <div className="w-full h-full rounded-full overflow-hidden bg-onyx cursor-pointer" onClick={() => router.push(`/dashboard?profile=${selectedChat.users.find(id => id !== user?.uid)}`)}>
+                    <div className="w-10 h-10 rounded-full border border-gold/20 p-0.5 relative">
+                      <div className="w-full h-full rounded-full overflow-hidden bg-onyx cursor-pointer relative" onClick={() => router.push(`/dashboard?profile=${selectedChat.users.find(id => id !== user?.uid)}`)}>
                         {selectedChat.otherUser?.photoURL ? (
-                          <img src={optimizeImage(selectedChat.otherUser.photoURL, 150)} alt="" className="w-full h-full object-cover" />
+                          <Image 
+                            src={optimizeImage(selectedChat.otherUser.photoURL, 150)} 
+                            alt="" 
+                            fill
+                            className="object-cover" 
+                            sizes="40px"
+                          />
                         ) : (
                           <User className="w-full h-full p-2 text-white/20" />
                         )}
