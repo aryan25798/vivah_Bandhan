@@ -22,7 +22,14 @@ service cloud.firestore {
     match /users/{userId} {
       // Allow getting and listing profiles for discovery
       allow read: if isSignedIn();
-      allow write: if isOwner(userId) || isAdmin();
+      
+      // Prevent privilege escalation: Users cannot modify their own protected fields
+      allow write: if isAdmin() || (
+        isOwner(userId) && (
+          (resource == null && !request.resource.data.keys().hasAny(['role', 'isAdmin', 'isBanned', 'isPremium', 'tier', 'isManaged'])) ||
+          (resource != null && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'isAdmin', 'isBanned', 'isPremium', 'tier', 'isManaged']))
+        )
+      );
     }
 
     // --- Connections & Requests ---

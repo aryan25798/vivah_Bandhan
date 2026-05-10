@@ -47,6 +47,7 @@ import {
   LogOut,
   ShieldCheck
 } from "lucide-react";
+import Image from "next/image";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { motion, AnimatePresence } from "framer-motion";
@@ -201,30 +202,58 @@ export default function AdminDashboard() {
     setIsBulkProcessing(true);
     try {
       const idToken = await user?.getIdToken();
-      const payload: any = { 
-        action, 
-        idToken,
-        all: selectAllGlobal,
-        searchTerm: selectAllGlobal ? searchTerm : undefined,
-        uids: selectAllGlobal ? undefined : Array.from(selectedUsers)
-      };
 
-      // We consolidate all bulk actions into a unified endpoint or use existing ones
-      // For simplicity and speed, I'll use the specific endpoints but with bulk support
-      let endpoint = "/api/admin/nuke";
-      if (action === 'ban' || action === 'unban') endpoint = "/api/admin/ban";
-      if (action === 'premium') endpoint = "/api/admin/premium";
+      let targetUids: string[] = [];
+      if (selectAllGlobal) {
+        const { collection, getDocs, query, where } = await import("firebase/firestore");
+        let q = query(collection(db, "users"), where("role", "!=", "admin"));
+        if (searchTerm) {
+          const capitalizedSearch = searchTerm.charAt(0).toUpperCase() + searchTerm.slice(1);
+          q = query(q, where("fullName", ">=", capitalizedSearch), where("fullName", "<=", capitalizedSearch + "\uf8ff"));
+        }
+        const snap = await getDocs(q);
+        targetUids = snap.docs.map(doc => doc.id);
+      } else {
+        targetUids = Array.from(selectedUsers);
+      }
 
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      if (targetUids.length === 0) {
+        alert("No targets found.");
+        setIsBulkProcessing(false);
+        return;
+      }
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || `Bulk ${action} failed`);
-      
-      alert(`Bulk ${action} initiated successfully for ${selectAllGlobal ? 'all' : selectedUsers.size} souls.`);
+      // For Ban, Unban, Premium: Backend batching is fast enough for 10k (takes a few seconds)
+      // For Delete (Nuke): Cloudinary and Auth deletion takes a long time, we MUST chunk on client
+      if (action === 'delete') {
+        const CHUNK_SIZE = 50;
+        let deletedCount = 0;
+        for (let i = 0; i < targetUids.length; i += CHUNK_SIZE) {
+          const chunk = targetUids.slice(i, i + CHUNK_SIZE);
+          const res = await fetch("/api/admin/nuke", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ idToken, uids: chunk }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || "Nuke chunk failed");
+          deletedCount += chunk.length;
+          console.log(`Nuked ${deletedCount}/${targetUids.length} souls...`);
+        }
+        alert(`Strategic Wipeout complete for ${deletedCount} souls.`);
+      } else {
+        // Safe to use standard offloading for non-destructive batch writes
+        let endpoint = action === 'premium' ? "/api/admin/premium" : "/api/admin/ban";
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, idToken, uids: targetUids }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `Bulk ${action} failed`);
+        alert(`Bulk ${action} initiated successfully for ${targetUids.length} souls.`);
+      }
+
       setSelectedUsers(new Set());
       setSelectAllGlobal(false);
       fetchAdminData();
@@ -862,7 +891,7 @@ export default function AdminDashboard() {
                          .map((u) => (
                           <div key={u.id} className={`glass p-6 rounded-[2.5rem] border transition-all group flex gap-6 items-center ${globalInteractions[u.id]?.incoming > 0 ? 'border-rose-gold/40 bg-rose-gold/5 ring-1 ring-rose-gold/20' : 'border-white/10'}`}>
                              <div className="w-20 h-20 rounded-[1.5rem] bg-zinc-900 border border-white/10 overflow-hidden shrink-0 shadow-2xl relative">
-                                {u.photoURL ? <img src={u.photoURL} className="w-full h-full object-cover" /> : <Users className="w-6 h-6 m-7 text-zinc-700" />}
+                                {u.photoURL ? <Image src={u.photoURL} alt="" fill className="w-full h-full object-cover" sizes="(max-width: 768px) 100vw, 50vw" /> : <Users className="w-6 h-6 m-7 text-zinc-700" />}
                                 {globalInteractions[u.id]?.incoming > 0 && <div className="absolute inset-0 bg-rose-gold/10 animate-pulse" />}
                              </div>
                              <div className="flex-1 min-w-0">
@@ -1058,7 +1087,7 @@ export default function AdminDashboard() {
                           <td className="px-8 py-5">
                             <div className="flex items-center gap-4">
                               <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-white/5 flex items-center justify-center overflow-hidden">
-                                {u.photoURL ? <img src={u.photoURL} className="w-full h-full object-cover" /> : <Users className="w-5 h-5 text-zinc-700" />}
+                                {u.photoURL ? <Image src={u.photoURL} alt="" fill className="w-full h-full object-cover" sizes="(max-width: 768px) 100vw, 50vw" /> : <Users className="w-5 h-5 text-zinc-700" />}
                               </div>
                               <div>
                                 <div className="flex items-center gap-2">
@@ -1220,7 +1249,7 @@ export default function AdminDashboard() {
                       <div className="flex -space-x-3 mb-3">
                         {match.users.map((uid: string) => (
                           <div key={uid} className="w-8 h-8 rounded-full border-2 border-[#060606] bg-zinc-900 overflow-hidden shrink-0">
-                            {userProfiles[uid]?.photoURL ? <img src={userProfiles[uid].photoURL} className="w-full h-full object-cover" /> : <Users className="w-4 h-4 m-2 text-zinc-700" />}
+                            {userProfiles[uid]?.photoURL ? <Image src={userProfiles[uid].photoURL} alt="" fill className="w-full h-full object-cover" sizes="(max-width: 768px) 100vw, 50vw" /> : <Users className="w-4 h-4 m-2 text-zinc-700" />}
                           </div>
                         ))}
                       </div>
@@ -1240,7 +1269,7 @@ export default function AdminDashboard() {
                         <div className="flex -space-x-4">
                            {selectedChat.users.map((uid: string) => (
                              <div key={uid} className="w-12 h-12 rounded-2xl border-4 border-[#060606] bg-zinc-900 overflow-hidden shrink-0 shadow-xl">
-                               {userProfiles[uid]?.photoURL ? <img src={userProfiles[uid].photoURL} className="w-full h-full object-cover" /> : <Users className="w-6 h-6 m-3 text-zinc-700" />}
+                               {userProfiles[uid]?.photoURL ? <Image src={userProfiles[uid].photoURL} alt="" fill className="w-full h-full object-cover" sizes="(max-width: 768px) 100vw, 50vw" /> : <Users className="w-6 h-6 m-3 text-zinc-700" />}
                              </div>
                            ))}
                         </div>
@@ -1267,7 +1296,7 @@ export default function AdminDashboard() {
                           <div key={i} className={`flex ${isMe ? 'justify-end' : 'justify-start'} group`}>
                             <div className={`flex gap-4 max-w-[80%] ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
                                <div className="w-8 h-8 rounded-xl bg-zinc-900 overflow-hidden shrink-0 mt-1 border border-white/10">
-                                  {m.isAdminMessage ? <ShieldCheck className="w-5 h-5 m-1.5 text-rose-gold" /> : (sender?.photoURL ? <img src={sender.photoURL} className="w-full h-full object-cover" /> : <Users className="w-4 h-4 m-2 text-zinc-700" />)}
+                                  {m.isAdminMessage ? <ShieldCheck className="w-5 h-5 m-1.5 text-rose-gold" /> : (sender?.photoURL ? <Image src={sender.photoURL} alt="" fill className="w-full h-full object-cover" sizes="(max-width: 768px) 100vw, 50vw" /> : <Users className="w-4 h-4 m-2 text-zinc-700" />)}
                                </div>
                                <div className={`space-y-2 ${isMe ? 'items-end' : 'items-start'}`}>
                                   <div className="flex items-center gap-2 px-1">
@@ -1315,7 +1344,7 @@ export default function AdminDashboard() {
                               className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${impersonateUid === uid ? 'bg-blue-500 text-white' : 'bg-white/5 text-zinc-500 hover:text-white'}`}
                             >
                                <div className="w-4 h-4 rounded-full bg-zinc-900 overflow-hidden border border-white/10">
-                                  {userProfiles[uid]?.photoURL ? <img src={userProfiles[uid].photoURL} className="w-full h-full object-cover" /> : <Users className="w-2.5 h-2.5 m-0.5 text-zinc-700" />}
+                                  {userProfiles[uid]?.photoURL ? <Image src={userProfiles[uid].photoURL} alt="" fill className="w-full h-full object-cover" sizes="(max-width: 768px) 100vw, 50vw" /> : <Users className="w-2.5 h-2.5 m-0.5 text-zinc-700" />}
                                </div>
                                As {userProfiles[uid]?.fullName?.split(' ')[0] || "Soul"}
                             </button>
@@ -1407,7 +1436,7 @@ export default function AdminDashboard() {
                               >
                                  <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-white/10 overflow-hidden shrink-0 group-hover:scale-105 transition-transform">
-                                       {session.photoURL ? <img src={session.photoURL} className="w-full h-full object-cover" /> : <Users className="w-5 h-5 m-2.5 text-zinc-700" />}
+                                       {session.photoURL ? <Image src={session.photoURL} alt="" fill className="w-full h-full object-cover" sizes="(max-width: 768px) 100vw, 50vw" /> : <Users className="w-5 h-5 m-2.5 text-zinc-700" />}
                                     </div>
                                     <div className="flex-1 min-w-0">
                                        <p className="text-xs font-bold text-white truncate">{session.fullName}</p>
@@ -1439,7 +1468,7 @@ export default function AdminDashboard() {
             >
               <div className="p-10 flex flex-col md:flex-row gap-8 items-center md:items-start">
                 <div className="w-32 h-32 rounded-[2.5rem] bg-zinc-900 border-2 border-rose-gold/30 overflow-hidden shrink-0 shadow-2xl">
-                   {selectedUser.photoURL ? <img src={selectedUser.photoURL} className="w-full h-full object-cover" /> : <Users className="w-12 h-12 m-10 text-zinc-700" />}
+                   {selectedUser.photoURL ? <Image src={selectedUser.photoURL} alt="" fill className="w-full h-full object-cover" sizes="(max-width: 768px) 100vw, 50vw" /> : <Users className="w-12 h-12 m-10 text-zinc-700" />}
                 </div>
                 <div className="flex-1 text-center md:text-left">
                   <div className="flex flex-col md:flex-row md:items-center gap-3 mb-2">

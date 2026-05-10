@@ -35,7 +35,7 @@ export default function Dashboard() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const [lastFeedUid, setLastFeedUid] = useState<string | null>(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [showFullProfile, setShowFullProfile] = useState(false);
@@ -73,9 +73,10 @@ export default function Dashboard() {
     if (!user) return;
     
     // Track all interactions involving the user
-    const qIncoming = query(collection(db, "requests"), where("toId", "==", user.uid));
-    const qOutgoing = query(collection(db, "requests"), where("fromId", "==", user.uid));
-    const qMatches = query(collection(db, "matches"), where("users", "array-contains", user.uid));
+    // Track all interactions involving the user (with limits to prevent quota exhaustion)
+    const qIncoming = query(collection(db, "requests"), where("toId", "==", user.uid), limit(50));
+    const qOutgoing = query(collection(db, "requests"), where("fromId", "==", user.uid), limit(50));
+    const qMatches = query(collection(db, "matches"), where("users", "array-contains", user.uid), limit(50));
 
     let currentStatuses: Record<string, { status: string, isIncoming: boolean, id: string }> = {};
 
@@ -167,57 +168,30 @@ export default function Dashboard() {
     if (!user || loading) return;
     setLoading(true);
     try {
-      const qInteractions = query(
-        collection(db, "interactions"), 
-        where("fromId", "==", user.uid),
-        limit(500)
-      );
-      const interactionSnap = await getDocs(qInteractions);
-      const interactedIds = new Set(interactionSnap.docs.map(doc => doc.data().toId));
-
-      let accumulatedProfiles: Profile[] = [];
-      let currentLastDoc = isLoadMore ? lastDoc : null;
-      let hasMore = true;
-      let attempts = 0;
-      const MAX_ATTEMPTS = 2;
-
-      while (accumulatedProfiles.length < 5 && hasMore && attempts < MAX_ATTEMPTS) {
-        let q = query(
-          collection(db, "users"), 
-          where("onboarded", "==", true), 
-          limit(10)
-        );
-
-        if (currentLastDoc) {
-          q = query(q, startAfter(currentLastDoc));
-        }
-
-        const querySnapshot = await getDocs(q);
-        if (querySnapshot.empty) {
-          hasMore = false;
-          break;
-        }
-
-        currentLastDoc = querySnapshot.docs[querySnapshot.docs.length - 1];
-        const data = querySnapshot.docs
-          .map(doc => ({ uid: doc.id, ...doc.data() } as Profile))
-          .filter(p => p.uid !== user.uid && !interactedIds.has(p.uid));
-        
-        accumulatedProfiles = [...accumulatedProfiles, ...data];
-        attempts++;
-      }
+      const idToken = await user.getIdToken();
+      const currentLastUid = isLoadMore ? lastFeedUid : null;
+      
+      const res = await fetch("/api/profiles/feed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken, lastUid: currentLastUid, limitCount: 5 })
+      });
+      
+      if (!res.ok) throw new Error("Failed to fetch feed");
+      
+      const data = await res.json();
       
       if (isLoadMore) {
-        setProfiles(prev => [...prev, ...accumulatedProfiles]);
-      } else {
         setProfiles(prev => {
           const existingIds = new Set(prev.map(p => p.uid));
-          const news = accumulatedProfiles.filter(p => !existingIds.has(p.uid));
+          const news = data.profiles.filter((p: any) => !existingIds.has(p.uid));
           return [...prev, ...news];
         });
+      } else {
+        setProfiles(data.profiles);
         setCurrentIndex(0);
       }
-      setLastDoc(currentLastDoc);
+      setLastFeedUid(data.lastUid);
     } catch (error) {
       console.error("Error fetching profiles:", error);
     } finally {
@@ -348,10 +322,10 @@ export default function Dashboard() {
           <div className="relative">
             <button 
               onClick={() => setShowProfileMenu(!showProfileMenu)}
-              className="w-10 h-10 md:w-12 md:h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-gold font-bold shadow-2xl hover:border-gold/30 transition-all overflow-hidden p-0.5"
+              className="w-10 h-10 md:w-12 md:h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-gold font-bold shadow-2xl hover:border-gold/30 transition-all overflow-hidden p-0.5 relative"
             >
               {user?.photoURL ? (
-                <img src={optimizeImage(user.photoURL, 100)} alt="Profile" className="w-full h-full object-cover rounded-[1.2rem]" />
+                <Image src={optimizeImage(user.photoURL, 100)} alt="Profile" fill className="object-cover rounded-[1.2rem]" sizes="48px" />
               ) : (
                 <User className="w-5 h-5 md:w-6 md:h-6" />
               )}
@@ -425,16 +399,15 @@ export default function Dashboard() {
                 <div className="relative mb-6 md:mb-10">
                   <div className="absolute -inset-4 bg-gold/10 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
                   <div className="w-32 h-32 sm:w-44 sm:h-44 md:w-52 md:h-52 rounded-full p-1.5 border border-white/10 relative z-10 overflow-hidden">
-                    <img 
+                    <Image 
                       src={optimizeImage(currentProfile.photoURL, 400)} 
                       alt={currentProfile.fullName}
-                      className="w-full h-full object-cover rounded-full transition-transform duration-[4s] group-hover:scale-110"
+                      fill
+                      className="object-cover rounded-full transition-transform duration-[4s] group-hover:scale-110"
+                      sizes="(max-width: 768px) 128px, (max-width: 1024px) 176px, 208px"
                     />
                   </div>
-                  {/* Match Score Badge */}
-                  <div className="absolute bottom-2 right-2 z-20 px-3 py-1 gold-gradient rounded-full text-[8px] font-black text-onyx shadow-xl border-2 border-[#060606] uppercase tracking-widest">
-                    {currentProfile.matchScore || "94% Match"}
-                  </div>
+                  {/* Match Score Badge Removed (Previously deceptive hardcoded 94%) */}
                 </div>
 
                 {/* Identity Section */}
@@ -467,37 +440,26 @@ export default function Dashboard() {
                 <div className="w-full space-y-4 md:space-y-6">
                   <div className="w-full flex items-center justify-center gap-4 md:gap-8">
                      <button 
-                      onClick={() => handleAction("dislike")}
-                      className="w-12 h-12 md:w-16 md:h-16 rounded-2xl bg-white/5 border border-white/10 text-white/20 flex items-center justify-center hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/30 transition-all group/pass active:scale-90"
+                        aria-label="Dislike Profile"
+                        onClick={() => handleAction('dislike')}
+                        className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-white/20 hover:text-white hover:bg-white/10 hover:scale-110 transition-all shadow-xl active:scale-95"
                      >
-                       <X className="w-5 h-5 group-hover/pass:rotate-90 transition-transform" />
+                       <X className="w-8 h-8 md:w-10 md:h-10" />
                      </button>
 
                      <button 
-                      onClick={() => !connectionStatuses[currentProfile.uid] && handleAction("like")}
-                      disabled={!!connectionStatuses[currentProfile.uid]}
-                      className={`flex-1 h-12 md:h-16 rounded-[1.5rem] md:rounded-[2rem] text-onyx flex items-center justify-center gap-3 font-black uppercase tracking-[0.2em] text-[10px] shadow-2xl transition-all ${
-                        connectionStatuses[currentProfile.uid]?.status === 'accepted' 
-                        ? 'bg-green-500/20 border border-green-500/30 text-green-500 shadow-none cursor-default'
-                        : connectionStatuses[currentProfile.uid]?.status === 'pending'
-                        ? 'bg-gold/20 border border-gold/30 text-gold shadow-none cursor-default'
-                        : 'gold-gradient hover:scale-[1.05] active:scale-95 shadow-[0_15px_30px_rgba(197,160,89,0.3)]'
-                      }`}
+                        aria-label="Star Profile"
+                        className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-gold/50 hover:text-gold hover:bg-gold/10 hover:scale-110 transition-all shadow-xl active:scale-95"
                      >
-                       {connectionStatuses[currentProfile.uid]?.status === 'accepted' ? (
-                         <><Check className="w-4 h-4" /><span>Bonded</span></>
-                       ) : connectionStatuses[currentProfile.uid]?.status === 'pending' ? (
-                         <><Sparkles className="w-4 h-4" /><span>Awaiting</span></>
-                       ) : (
-                         <><Heart className="w-4 h-4 fill-onyx/20" /><span>Initialize</span></>
-                       )}
+                       <Star className="w-5 h-5 md:w-6 md:h-6" fill="currentColor" />
                      </button>
 
                      <button 
-                      onClick={() => handleAction("like")}
-                      className="w-12 h-12 md:w-16 md:h-16 rounded-2xl bg-white/5 border border-white/10 text-white/20 flex items-center justify-center hover:bg-gold/10 hover:text-gold hover:border-gold/30 transition-all group/star active:scale-90"
+                        aria-label="Like Profile"
+                        onClick={() => handleAction('like')}
+                        className="w-20 h-20 md:w-24 md:h-24 rounded-full royal-gradient border border-gold/30 flex items-center justify-center text-black hover:scale-110 hover:shadow-[0_0_40px_rgba(197,160,89,0.4)] transition-all active:scale-95 z-10"
                      >
-                       <Star className="w-5 h-5 group-hover/star:scale-125 transition-transform" />
+                       <Heart className="w-10 h-10 md:w-12 md:h-12" fill="currentColor" />
                      </button>
                   </div>
                   
@@ -545,15 +507,21 @@ export default function Dashboard() {
           >
             <div className="min-h-screen flex flex-col lg:flex-row relative">
               {/* Profile Visual: Left Panel */}
-              <div className="w-full lg:w-1/2 h-[60vh] lg:h-screen sticky top-0 z-10 overflow-hidden">
-                <motion.img 
+              <div className="w-full lg:w-1/2 h-[60vh] lg:h-screen sticky top-0 z-10 overflow-hidden relative">
+                <motion.div
                   initial={{ scale: 1.1 }}
                   animate={{ scale: 1 }}
                   transition={{ duration: 1.5, ease: "easeOut" }}
-                  src={optimizeImage(modalProfile.photoURL, 1200)} 
-                  alt="" 
-                  className="w-full h-full object-cover" 
-                />
+                  className="absolute inset-0"
+                >
+                  <Image 
+                    src={optimizeImage(modalProfile.photoURL, 1200)} 
+                    alt="" 
+                    fill
+                    className="object-cover" 
+                    sizes="(max-width: 1024px) 100vw, 50vw"
+                  />
+                </motion.div>
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-[#060606] hidden lg:block" />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#060606] via-transparent to-transparent lg:hidden" />
                 

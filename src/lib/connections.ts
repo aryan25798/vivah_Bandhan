@@ -172,12 +172,20 @@ export const acceptRequest = async (requestId: string, fromId: string, toId: str
 
 export const declineRequest = async (requestId: string) => {
   try {
-    const requestRef = doc(db, "requests", requestId);
-    await updateDoc(requestRef, { status: "declined" });
+    const { runTransaction, doc } = await import("firebase/firestore");
+    await runTransaction(db, async (transaction) => {
+      const requestRef = doc(db, "requests", requestId);
+      const requestSnap = await transaction.get(requestRef);
+      
+      if (!requestSnap.exists()) throw new Error("Request not found");
+      if (requestSnap.data().status !== 'pending') throw new Error("Request already processed");
+      
+      transaction.update(requestRef, { status: "declined" });
+    });
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error declining:", error);
-    return { error: "Failed to decline" };
+    return { error: error.message || "Failed to decline" };
   }
 };
 export const recordAction = async (fromId: string, toId: string, action: 'like' | 'dislike') => {

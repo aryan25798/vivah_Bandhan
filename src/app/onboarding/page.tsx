@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Heart, Sparkles, User, Briefcase, Stars, CheckCircle, ArrowRight, Camera, AlertCircle } from "lucide-react";
+import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { db, auth } from "@/lib/firebase";
@@ -344,7 +345,7 @@ export default function Onboarding() {
                    <div className="w-40 h-40 md:w-56 md:h-56 rounded-full border-2 border-gold/20 p-2 relative group shadow-2xl">
                       <div className="w-full h-full rounded-full bg-white/5 flex items-center justify-center overflow-hidden border border-gold/10">
                         {formData.photoURL ? (
-                          <img src={formData.photoURL} alt="Preview" className="w-full h-full object-cover scale-110" />
+                          <Image src={formData.photoURL} alt="Preview" fill className="w-full h-full object-cover scale-110" sizes="(max-width: 768px) 100vw, 50vw" />
                         ) : (
                           <Camera className="w-12 h-12 md:w-20 md:h-20 text-gold/20" />
                         )}
